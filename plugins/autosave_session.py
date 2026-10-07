@@ -5,13 +5,11 @@ pestanas y directorio de cada terminal) como layout "default", que es el que
 Terminator abre al arrancar. Si en una terminal esta corriendo un comando
 permitido (ver _detect), tambien se guarda para relanzarlo al restaurar.
 
-Los programas que se relanzan son configurables desde el menu del clic derecho
-(Autosave) o en el config de Terminator:
-
-    [plugins]
-      [[AutosaveSession]]
-        relaunch = htop, watch, lazydocker
-        relaunch_following = tail, journalctl
+Los programas que se relanzan se configuran en ~/.config/terminator/autosave.conf
+(se crea con DEFAULT_RULES si no existe), o desde el menu del clic derecho
+(Autosave). Una regla por linea: el primer token es el programa y el resto son
+argumentos que tiene que tener para relanzarse ("tail -f" solo relanza tail si
+estaba con -f). Se relanza con los mismos argumentos con los que corria.
 """
 import glob
 import json
@@ -26,7 +24,7 @@ from gi.repository import GLib, Gtk
 import terminatorlib.plugin as plugin
 from terminatorlib.config import Config
 from terminatorlib.terminator import Terminator
-from terminatorlib.util import dbg, err
+from terminatorlib.util import dbg, err, get_config_dir
 
 AVAILABLE = ['AutosaveSession']
 
@@ -34,27 +32,62 @@ INTERVAL = 15
 LAYOUT = 'default'
 NVM_NODE = re.compile(r'/\.nvm/versions/node/(v[^/]+)/')
 
-# Valores por defecto de la config. relaunch: se relanzan con los mismos
-# argumentos. relaunch_following: solo si estaban siguiendo un log (-f).
-DEFAULTS = {
-    'relaunch': ['htop', 'btop', 'top', 'glances', 'nvtop', 'watch', 'nload', 'bmon'],
-    'relaunch_following': ['tail', 'journalctl'],
-}
-FOLLOW_FLAGS = {'-f', '-F', '--follow'}
-BUILTIN = {'claude', 'npm'}
+RULES_FILE = os.path.join(get_config_dir(), 'autosave.conf')
+DEFAULT_RULES = """\
+# Programas que el autosave de Terminator relanza al restaurar la sesion.
+# Una regla por linea: programa y, opcionalmente, argumentos que tiene que
+# tener para relanzarse. Se relanza con los mismos argumentos que tenia.
+# claude se relanza con --resume de la conversacion que tenia abierta.
+
+claude
+npm run dev:ws
+htop
+btop
+top
+glances
+nvtop
+watch
+nload
+bmon
+tail -f
+tail -F
+journalctl -f
+"""
 
 
-def _setting(key):
-    value = Config().plugin_get(AVAILABLE[0], key, DEFAULTS[key])
-    if isinstance(value, str):
-        value = [value] if value else []
-    return [v for v in value if v]
+def _read_rules():
+    """Reglas como listas de tokens; crea el archivo por defecto si no existe."""
+    if not os.path.exists(RULES_FILE):
+        with open(RULES_FILE, 'w') as f:
+            f.write(DEFAULT_RULES)
+    rules = []
+    with open(RULES_FILE) as f:
+        for line in f:
+            line = line.split('#', 1)[0].strip()
+            if line:
+                rules.append(shlex.split(line))
+    return rules
 
 
-def _set_setting(key, value):
-    config = Config()
-    config.plugin_set(AVAILABLE[0], key, value)
-    config.save()
+def _write_rules(add=None, remove=None):
+    """Agrega una regla o saca las de un programa, conservando comentarios."""
+    _read_rules()
+    with open(RULES_FILE) as f:
+        lines = f.readlines()
+    if remove:
+        lines = [l for l in lines
+                 if l.split('#', 1)[0].split()[:1] != [remove]]
+    if add:
+        if lines and not lines[-1].endswith('\n'):
+            lines[-1] += '\n'
+        lines.append(add + '\n')
+    with open(RULES_FILE, 'w') as f:
+        f.writelines(lines)
+
+
+def _match(rules, args):
+    name = os.path.basename(args[0]) if args else ''
+    return any(rule[0] == name and set(rule[1:]) <= set(args[1:]) for rule in rules)
 
 
 def _children(pid):
@@ -107,25 +140,21 @@ def _foreground(term):
     return os.path.basename(args[0]) if args else None
 
 
-def _detect(term):
+def _detect(term, rules):
     """Comando permitido que corre dentro de la terminal, o None."""
     if not term.pid:
         return None
-    relaunch = set(_setting('relaunch'))
-    following = set(_setting('relaunch_following'))
     queue = _children(term.pid)
     while queue:
         pid = queue.pop(0)
         args = _args(pid)
-        if args[:3] == ['npm', 'run', 'dev:ws']:
+        if _match(rules, args):
+            name = os.path.basename(args[0])
+            if name == 'claude':
+                return _claude_command(pid)
             version = _node_version(pid)
             nvm = 'nvm use %s >/dev/null; ' % version if version else ''
-            return nvm + 'npm run dev:ws'
-        if args and os.path.basename(args[0]) == 'claude':
-            return _claude_command(pid)
-        name = os.path.basename(args[0]) if args else ''
-        if name in relaunch or (name in following and FOLLOW_FLAGS & set(args)):
-            return shlex.join([name] + args[1:])
+            return nvm + shlex.join([name] + args[1:])
         queue.extend(_children(pid))
     return None
 
@@ -135,6 +164,10 @@ class AutosaveSession(plugin.Plugin):
 
     def __init__(self):
         self.last = None
+        # Ultimo "claude --resume" visto por terminal: al cerrar Terminator,
+        # claude borra su archivo de sesion antes de terminar y un guardado en
+        # ese momento perderia el resume
+        self.resumes = {}
         self.timer = GLib.timeout_add_seconds(INTERVAL, self.save)
 
     def unload(self):
@@ -143,48 +176,46 @@ class AutosaveSession(plugin.Plugin):
     def callback(self, menuitems, menu, terminal):
         submenu = Gtk.Menu()
         name = _foreground(terminal)
-        relaunch = _setting('relaunch')
-        following = _setting('relaunch_following')
+        rules = _read_rules()
 
         if not name:
             current = Gtk.MenuItem.new_with_label('No hay ningún programa corriendo')
             current.set_sensitive(False)
-        elif name in BUILTIN:
-            current = Gtk.MenuItem.new_with_label('«%s» se relanza siempre' % name)
-            current.set_sensitive(False)
         else:
-            key = 'relaunch_following' if name in following else 'relaunch'
-            label = 'Relanzar «%s» al restaurar' % name
-            if key == 'relaunch_following':
-                label += ' (solo con -f)'
-            current = Gtk.CheckMenuItem.new_with_label(label)
-            current.set_active(name in relaunch or name in following)
-            current.connect('toggled', self.on_toggled, key, name)
+            current = Gtk.CheckMenuItem.new_with_label('Relanzar «%s» al restaurar' % name)
+            current.set_active(any(rule[0] == name for rule in rules))
+            current.connect('toggled', self.on_toggled, name)
         submenu.append(current)
 
-        if relaunch or following:
-            submenu.append(Gtk.SeparatorMenuItem())
+        if rules:
             saved = Gtk.Menu()
-            for key, names in (('relaunch', relaunch), ('relaunch_following', following)):
-                for other in names:
-                    item = Gtk.CheckMenuItem.new_with_label(
-                        other + (' (solo con -f)' if key == 'relaunch_following' else ''))
-                    item.set_active(True)
-                    item.connect('toggled', self.on_toggled, key, other)
-                    saved.append(item)
+            for rule in rules:
+                item = Gtk.CheckMenuItem.new_with_label(shlex.join(rule))
+                item.set_active(True)
+                item.connect('toggled', self.on_toggled, rule[0])
+                saved.append(item)
             saved_item = Gtk.MenuItem.new_with_label('Programas que se relanzan')
             saved_item.set_submenu(saved)
+            submenu.append(Gtk.SeparatorMenuItem())
             submenu.append(saved_item)
+
+        edit = Gtk.MenuItem.new_with_label('Editar lista…')
+        edit.connect('activate', lambda _item: Gtk.show_uri_on_window(
+            None, GLib.filename_to_uri(RULES_FILE), Gtk.get_current_event_time()))
+        submenu.append(edit)
 
         root = Gtk.MenuItem.new_with_label('Autosave')
         root.set_submenu(submenu)
         menuitems.append(root)
 
-    def on_toggled(self, item, key, name):
-        names = [n for n in _setting(key) if n != name]
-        if item.get_active():
-            names.append(name)
-        _set_setting(key, names)
+    def on_toggled(self, item, name):
+        try:
+            if item.get_active():
+                _write_rules(add=name)
+            else:
+                _write_rules(remove=name)
+        except OSError as ex:
+            err('AutosaveSession: %s' % ex)
         self.last = None
 
     def save(self):
@@ -192,13 +223,21 @@ class AutosaveSession(plugin.Plugin):
             terminator = Terminator()
             if not terminator.terminals:
                 return True
+            rules = _read_rules()
             layout = terminator.describe_layout(save_cwd=True)
             by_uuid = {str(t.uuid): t for t in terminator.terminals}
             for entry in layout.values():
                 if entry.get('type') != 'Terminal':
                     continue
-                term = by_uuid.get(str(entry.get('uuid')))
-                command = term and _detect(term)
+                uuid = str(entry.get('uuid'))
+                term = by_uuid.get(uuid)
+                command = term and _detect(term, rules)
+                if command == 'claude' and uuid in self.resumes:
+                    command = self.resumes[uuid]
+                elif command and command.startswith('claude --resume '):
+                    self.resumes[uuid] = command
+                else:
+                    self.resumes.pop(uuid, None)
                 if command:
                     # bash -i para que cargue nvm/PATH del .bashrc; al cortar
                     # el comando queda un shell abierto en la terminal
