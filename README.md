@@ -2,7 +2,9 @@
 
 Marketplace de plugins para [Terminator](https://github.com/gnome-terminator/terminator).
 Agrega al menú del clic derecho un submenú **Plugins** para activar y desactivar
-en caliente los plugins del catálogo, y para actualizarlo con `git pull`.
+en caliente los plugins del catálogo, y para actualizarlo con `git pull`. Cuando
+cambia el código de un plugin activo (al actualizar o al editarlo), se recarga
+solo, sin reiniciar Terminator.
 
 ## Instalación
 

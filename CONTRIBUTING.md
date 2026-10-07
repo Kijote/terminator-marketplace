@@ -40,9 +40,9 @@ class MiPlugin(plugin.MenuItem):
   `URLHandler` para reconocer URLs). Mirá los plugins que trae Terminator en
   `/usr/lib/python3/dist-packages/terminatorlib/plugins/` como ejemplo.
 - **`unload()`**: si tu plugin arranca timers (`GLib.timeout_add…`) o conecta
-  señales, implementá `unload()` y limpialos ahí. El marketplace activa y
-  desactiva plugins sin reiniciar Terminator, y sin `unload()` el plugin
-  sigue corriendo aunque lo desactiven.
+  señales, implementá `unload()` y limpialos ahí. El marketplace activa,
+  desactiva y recarga plugins sin reiniciar Terminator, y sin `unload()` la
+  versión vieja sigue corriendo junto a la nueva.
 - **Nombres únicos**: el nombre del archivo no puede coincidir con un módulo de
   Python ni con un plugin que trae Terminator (`logger.py`, `json.py`…), y las
   clases no pueden repetirse con las de otro plugin. El validador lo revisa.
@@ -80,8 +80,10 @@ Después reiniciá Terminator y desde clic derecho → **Plugins**:
 2. Desactivalo y verificá que deje de hacer lo que hacía.
 3. Volvé a activarlo, sin reiniciar.
 
-Los cambios de código de un plugin ya activo aplican al reiniciar Terminator.
-Si algo falla, corré Terminator con `terminator -d` desde otra terminal para
+Mientras el plugin está activo, cada vez que guardás el archivo el marketplace
+lo recarga solo y te avisa con una notificación. Si el código nuevo tiene un
+error, la notificación lo dice y sigue corriendo la versión anterior. Si algo
+falla, corré Terminator con `terminator -d` desde otra terminal para
 ver los errores.
 
 ## 5. Abrí el pull request
