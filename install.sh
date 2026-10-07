@@ -6,8 +6,8 @@
 # ~/.local/share/terminator-marketplace), o lo actualiza si ya esta.
 #
 # Opciones:
-#   --guard          instala o actualiza el guardian de seguridad (pide sudo)
-#   --remove-guard   lo desinstala (pide sudo)
+#   --guard          instala o actualiza el guardian de seguridad (pide contraseña: sudo o pkexec)
+#   --remove-guard   lo desinstala (pide contraseña: sudo o pkexec)
 # Con el one-liner: curl ... | bash -s -- --guard
 set -euo pipefail
 
@@ -58,15 +58,28 @@ if 'Marketplace' not in enabled:
 config.write()
 EOF
 
+# sudo necesita una terminal para pedir la contraseña; sin terminal (ej. corrido
+# desde otra app) se usa pkexec, que la pide con una ventana del escritorio
+as_root() {
+    if sudo -n true 2>/dev/null || (: </dev/tty) 2>/dev/null; then
+        sudo "$@"
+    elif command -v pkexec >/dev/null; then
+        pkexec "$@"
+    else
+        echo "Hace falta una terminal para pedir la contraseña de sudo." >&2
+        return 1
+    fi
+}
+
 if [ -n "$GUARD" ]; then
     SYSTEM_PLUGINS="$(python3 -c 'import os, terminatorlib; print(os.path.join(os.path.dirname(terminatorlib.__file__), "plugins"))')"
     if [ "$GUARD" = install ]; then
-        echo "Instalando el guardián de seguridad en $SYSTEM_PLUGINS (pide sudo)..."
-        sudo install -m 644 "$REPO/guard/marketplace_guard.py" "$SYSTEM_PLUGINS/marketplace_guard.py"
+        echo "Instalando el guardián de seguridad en $SYSTEM_PLUGINS (pide contraseña)..."
+        as_root install -m 644 "$REPO/guard/marketplace_guard.py" "$SYSTEM_PLUGINS/marketplace_guard.py"
         echo "Guardián instalado: los plugins bloqueados se sacan antes de que Terminator los cargue."
     else
-        echo "Desinstalando el guardián de seguridad (pide sudo)..."
-        sudo rm -f "$SYSTEM_PLUGINS/marketplace_guard.py"
+        echo "Desinstalando el guardián de seguridad (pide contraseña)..."
+        as_root rm -f "$SYSTEM_PLUGINS/marketplace_guard.py"
         echo "Guardián desinstalado."
     fi
 fi
