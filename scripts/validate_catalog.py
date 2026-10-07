@@ -7,10 +7,16 @@ Se corre en CI en cada PR y se puede correr a mano:
 import ast
 import json
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REQUIRED = {'id': str, 'name': str, 'description': str, 'file': str, 'classes': list}
+# Opcionales: "blocked": "motivo" desactiva el plugin en todas las instalaciones
+OPTIONAL = {'blocked': str}
+# Terminator importa el plugin por el nombre del archivo: tiene que ser un
+# nombre de modulo valido
+FILE_NAME = re.compile(r'^plugins/[a-z][a-z0-9_]*\.py$')
 
 # Terminator importa cada plugin por el nombre del archivo: si coincide con un
 # modulo ya cargado (plugins que trae Terminator, la stdlib), se usa ese otro
@@ -55,8 +61,9 @@ def check_plugin(entry, where):
     path = os.path.join(ROOT, entry['file'])
     module = os.path.splitext(os.path.basename(entry['file']))[0]
 
-    if not entry['file'].startswith('plugins/') or not entry['file'].endswith('.py'):
-        error('%s: "file" tiene que ser plugins/<nombre>.py' % where)
+    if not FILE_NAME.match(entry['file']):
+        error('%s: "file" tiene que ser plugins/<nombre>.py, con el nombre en '
+              'minúsculas, dígitos y _ y empezando con una letra' % where)
         return
     if not os.path.isfile(path):
         error('%s: no existe %s' % (where, entry['file']))
@@ -116,6 +123,12 @@ def main():
         if missing:
             error('%s: faltan o tienen tipo incorrecto: %s' % (where, ', '.join(missing)))
             continue
+        wrong = [k for k, kind in OPTIONAL.items() if k in entry and not isinstance(entry[k], kind)]
+        if wrong:
+            error('%s: tipo incorrecto en: %s' % (where, ', '.join(wrong)))
+        unknown = set(entry) - set(REQUIRED) - set(OPTIONAL)
+        if unknown:
+            warn('%s: campos desconocidos: %s' % (where, ', '.join(sorted(unknown))))
         if not entry['classes'] or not all(isinstance(c, str) for c in entry['classes']):
             error('%s: "classes" tiene que ser una lista no vacía de nombres' % where)
             continue

@@ -24,6 +24,33 @@ Después cerrá Terminator del todo y abrilo de nuevo: clic derecho → **Plugin
 |---|---|
 | Autosave de sesión | Guarda ventanas, splits, directorios y comandos (`npm run dev:ws`, `claude --resume <sesión>`, monitores como `htop`/`watch` y `tail -f`) cada 15s y los restaura al abrir Terminator. Qué programas se relanzan se configura en `~/.config/terminator/autosave.conf` (una regla por línea, ej. `htop` o `tail -f`) o con clic derecho → **Autosave**. |
 
+## Bloquear un plugin (parche de seguridad)
+
+Para desactivar un plugin en todas las instalaciones, agregale `"blocked"` con
+el motivo en `catalog.json` y subilo a `main`:
+
+```json
+{
+  "id": "mi_plugin",
+  ...
+  "blocked": "Vulnerabilidad en la versión 1.2, se corrige en la próxima"
+}
+```
+
+- El marketplace consulta el catálogo de GitHub al arrancar y cada 30 minutos,
+  **solo para leer los bloqueos**: no baja ni cambia código sin que lo pidas.
+- Un plugin bloqueado se desactiva al instante, se borra su symlink y sale de
+  la config, así que no vuelve a cargar. En el menú aparece como
+  **(bloqueado)**, con el motivo en el tooltip, y no se puede activar.
+- Para levantar el bloqueo, sacá el campo `"blocked"`. Los que lo tenían
+  activo lo vuelven a activar desde el menú.
+- Si el bloqueo se publica con Terminator cerrado, el plugin puede llegar a
+  cargarse al arrancar (Terminator carga los plugins sin un orden fijo) y se
+  desactiva apenas el marketplace lee el bloqueo, en los primeros segundos.
+
+Sacar un plugin del catálogo también lo desactiva, pero solo cuando cada
+instalación actualiza el catálogo. Para un parche urgente usá `"blocked"`.
+
 ## Contribuir
 
 ¿Querés sumar un plugin? Mirá [CONTRIBUTING.md](CONTRIBUTING.md): cómo
