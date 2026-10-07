@@ -7,11 +7,14 @@ en caliente los plugins del catálogo, y para actualizarlo con `git pull`.
 ## Instalación
 
 ```bash
-git clone https://github.com/Kijote/terminator-marketplace.git ~/dev/terminator-marketplace
-~/dev/terminator-marketplace/install.sh
+curl -fsSL https://raw.githubusercontent.com/Kijote/terminator-marketplace/main/install.sh | bash
 ```
 
-Después reiniciá Terminator (cerralo del todo y abrilo de nuevo).
+Clona el repo en `~/.local/share/terminator-marketplace` (o en
+`$TERMINATOR_MARKETPLACE_DIR`) y activa el marketplace. Si ya estaba instalado,
+lo actualiza. También se puede clonar a mano y correr `./install.sh` desde el clon.
+
+Después cerrá Terminator del todo y abrilo de nuevo: clic derecho → **Plugins**.
 
 ## Plugins
 

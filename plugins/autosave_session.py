@@ -178,14 +178,13 @@ class AutosaveSession(plugin.Plugin):
         name = _foreground(terminal)
         rules = _read_rules()
 
-        if not name:
-            current = Gtk.MenuItem.new_with_label('No hay ningún programa corriendo')
-            current.set_sensitive(False)
-        else:
-            current = Gtk.CheckMenuItem.new_with_label('Relanzar «%s» al restaurar' % name)
-            current.set_active(any(rule[0] == name for rule in rules))
-            current.connect('toggled', self.on_toggled, name)
-        submenu.append(current)
+        # El programa de esta terminal solo se ofrece si todavia no esta en la
+        # lista; para sacarlo esta la lista de abajo
+        if name and not any(rule[0] == name for rule in rules):
+            add = Gtk.MenuItem.new_with_label('Agregar «%s» a la lista' % name)
+            add.connect('activate', self.on_add, name)
+            submenu.append(add)
+            submenu.append(Gtk.SeparatorMenuItem())
 
         if rules:
             saved = Gtk.Menu()
@@ -196,7 +195,6 @@ class AutosaveSession(plugin.Plugin):
                 saved.append(item)
             saved_item = Gtk.MenuItem.new_with_label('Programas que se relanzan')
             saved_item.set_submenu(saved)
-            submenu.append(Gtk.SeparatorMenuItem())
             submenu.append(saved_item)
 
         edit = Gtk.MenuItem.new_with_label('Editar lista…')
@@ -207,6 +205,13 @@ class AutosaveSession(plugin.Plugin):
         root = Gtk.MenuItem.new_with_label('Autosave')
         root.set_submenu(submenu)
         menuitems.append(root)
+
+    def on_add(self, _item, name):
+        try:
+            _write_rules(add=name)
+        except OSError as ex:
+            err('AutosaveSession: %s' % ex)
+        self.last = None
 
     def on_toggled(self, item, name):
         try:
