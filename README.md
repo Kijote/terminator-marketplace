@@ -22,23 +22,8 @@ Después cerrá Terminator del todo y abrilo de nuevo: clic derecho → **Plugin
 |---|---|
 | Autosave de sesión | Guarda ventanas, splits, directorios y comandos (`npm run dev:ws`, `claude --resume <sesión>`, monitores como `htop`/`watch` y `tail -f`) cada 15s y los restaura al abrir Terminator. Qué programas se relanzan se configura en `~/.config/terminator/autosave.conf` (una regla por línea, ej. `htop` o `tail -f`) o con clic derecho → **Autosave**. |
 
-## Agregar un plugin
+## Contribuir
 
-1. Poné el archivo en `plugins/`. Es un plugin normal de Terminator: define
-   `AVAILABLE` y clases que heredan de `terminatorlib.plugin.Plugin`.
-2. Si arranca timers o conecta señales, implementá `unload()` para limpiarlos,
-   así se puede desactivar sin reiniciar.
-3. Agregalo a `catalog.json`:
-   ```json
-   {
-     "id": "mi_plugin",
-     "name": "Mi plugin",
-     "description": "Qué hace (se muestra como tooltip).",
-     "file": "plugins/mi_plugin.py",
-     "classes": ["MiPlugin"]
-   }
-   ```
-
-Los plugins se instalan como symlinks a este repo, así que un **Actualizar
-catálogo** baja el código nuevo. Los cambios de código de un plugin ya activo
-aplican al reiniciar Terminator.
+¿Querés sumar un plugin? Mirá [CONTRIBUTING.md](CONTRIBUTING.md): cómo
+escribirlo, agregarlo al catálogo, probarlo y abrir el pull request. Cada PR
+pasa por una validación automática (`scripts/validate_catalog.py`).
