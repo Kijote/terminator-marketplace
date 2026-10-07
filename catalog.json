@@ -1,0 +1,9 @@
+[
+  {
+    "id": "autosave_session",
+    "name": "Autosave de sesión",
+    "description": "Guarda ventanas, splits, directorios y comandos (npm run dev:ws, claude --resume) cada 15s y los restaura al abrir Terminator.",
+    "file": "plugins/autosave_session.py",
+    "classes": ["AutosaveSession"]
+  }
+]
