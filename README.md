@@ -17,7 +17,7 @@ Después reiniciá Terminator (cerralo del todo y abrilo de nuevo).
 
 | Plugin | Qué hace |
 |---|---|
-| Autosave de sesión | Guarda ventanas, splits, directorios y comandos (`npm run dev:ws`, `claude --resume <sesión>`) cada 15s y los restaura al abrir Terminator. |
+| Autosave de sesión | Guarda ventanas, splits, directorios y comandos (`npm run dev:ws`, `claude --resume <sesión>`, monitores como `htop`/`watch` y `tail -f`) cada 15s y los restaura al abrir Terminator. |
 
 ## Agregar un plugin
 

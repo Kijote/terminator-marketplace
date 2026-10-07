@@ -3,7 +3,7 @@
 Cada INTERVAL segundos guarda la disposicion actual (ventanas, splits,
 pestanas y directorio de cada terminal) como layout "default", que es el que
 Terminator abre al arrancar. Si en una terminal esta corriendo un comando
-permitido (ver _detect), tambien se guarda para relanzarlo al restaurar.
+permitido (ver _detect, MONITORS y FOLLOWERS), tambien se guarda para relanzarlo al restaurar.
 """
 import glob
 import json
@@ -23,6 +23,12 @@ AVAILABLE = ['AutosaveSession']
 INTERVAL = 15
 LAYOUT = 'default'
 NVM_NODE = re.compile(r'/\.nvm/versions/node/(v[^/]+)/')
+
+# Programas de solo lectura: se relanzan con los mismos argumentos
+MONITORS = {'htop', 'btop', 'top', 'glances', 'nvtop', 'watch', 'nload', 'bmon'}
+# Se relanzan solo si estaban siguiendo un log
+FOLLOWERS = {'tail', 'journalctl'}
+FOLLOW_FLAGS = {'-f', '-F', '--follow'}
 
 
 def _children(pid):
@@ -77,6 +83,9 @@ def _detect(term):
             return nvm + 'npm run dev:ws'
         if args and os.path.basename(args[0]) == 'claude':
             return _claude_command(pid)
+        name = os.path.basename(args[0]) if args else ''
+        if name in MONITORS or (name in FOLLOWERS and FOLLOW_FLAGS & set(args)):
+            return shlex.join([name] + args[1:])
         queue.extend(_children(pid))
     return None
 
