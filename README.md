@@ -7,7 +7,7 @@ en caliente los plugins del catálogo, y para actualizarlo con `git pull`.
 ## Instalación
 
 ```bash
-git clone <este repo> ~/dev/terminator-marketplace
+git clone https://github.com/Kijote/terminator-marketplace.git ~/dev/terminator-marketplace
 ~/dev/terminator-marketplace/install.sh
 ```
 
