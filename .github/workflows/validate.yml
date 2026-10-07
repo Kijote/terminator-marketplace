@@ -20,3 +20,5 @@ jobs:
         run: python3 scripts/validate_catalog.py
       - name: Validar install.sh
         run: bash -n install.sh
+      - name: Compilar marketplace y guardián
+        run: python3 -m py_compile marketplace.py guard/marketplace_guard.py

@@ -24,7 +24,7 @@ BUILTIN_MODULES = {
     'activitywatch', 'command_notify', 'custom_commands', 'dir_open',
     'insert_term_name', 'logger', 'maven', 'run_cmd_on_match',
     'save_last_session_layout', 'terminalshot', 'testplugin', 'url_handlers',
-    'marketplace',
+    'marketplace', 'marketplace_guard',
 }
 BUILTIN_CLASSES = {
     'CustomCommandsMenu', 'CurrDirOpen', 'InsertTermName', 'Logger',

@@ -44,12 +44,32 @@ el motivo en `catalog.json` y subilo a `main`:
   **(bloqueado)**, con el motivo en el tooltip, y no se puede activar.
 - Para levantar el bloqueo, sacá el campo `"blocked"`. Los que lo tenían
   activo lo vuelven a activar desde el menú.
-- Si el bloqueo se publica con Terminator cerrado, el plugin puede llegar a
-  cargarse al arrancar (Terminator carga los plugins sin un orden fijo) y se
-  desactiva apenas el marketplace lee el bloqueo, en los primeros segundos.
+- Si el bloqueo se publica con Terminator cerrado, sin el guardián (ver abajo)
+  el plugin puede llegar a cargarse al arrancar, porque Terminator carga los
+  plugins sin un orden fijo, y se desactiva apenas el marketplace lee el
+  bloqueo, en los primeros segundos.
 
 Sacar un plugin del catálogo también lo desactiva, pero solo cuando cada
 instalación actualiza el catálogo. Para un parche urgente usá `"blocked"`.
+
+### Guardián de seguridad
+
+Para que un plugin bloqueado no llegue a ejecutarse nunca, ni siquiera al
+arrancar, instalá el guardián:
+
+```bash
+~/.local/share/terminator-marketplace/install.sh --guard   # o desde tu clon
+# con el one-liner:
+curl -fsSL https://raw.githubusercontent.com/Kijote/terminator-marketplace/main/install.sh | bash -s -- --guard
+```
+
+Se instala con `sudo` en la carpeta de plugins del sistema de Terminator, que
+se carga antes que la tuya. Al arrancar Terminator consulta los bloqueos en
+GitHub (con un timeout de 2 segundos; sin red usa los últimos que conoce) y
+saca los plugins bloqueados antes de que se carguen.
+
+En el menú **Plugins** se ve si está activo o desactualizado. Cuando cambia,
+actualizalo con el mismo comando. Para sacarlo: `install.sh --remove-guard`.
 
 ## Contribuir
 

@@ -42,6 +42,9 @@ SELF = {'id': 'marketplace', 'name': 'Marketplace', 'file': 'marketplace.py',
 # Los editores y git guardan en rafagas de eventos: se espera a que se calmen
 RELOAD_DELAY_MS = 500
 CHECK_INTERVAL = 30 * 60
+GUARD_SOURCE = os.path.join(REPO, 'guard', 'marketplace_guard.py')
+GUARD_INSTALLED = os.path.join(os.path.dirname(plugin.__file__), 'plugins',
+                               'marketplace_guard.py')
 
 
 def _catalog():
@@ -127,6 +130,28 @@ def _remove(record):
         os.remove(link)
 
 
+def _guard_status():
+    """(texto para el menu, tooltip) del guardian de seguridad."""
+    command = os.path.join(REPO, 'install.sh') + ' --guard'
+    try:
+        with open(GUARD_INSTALLED, 'rb') as f:
+            installed = f.read()
+    except OSError:
+        return ('Guardián de seguridad: no instalado',
+                'Saca los plugins bloqueados antes de que Terminator los cargue. '
+                'Para instalarlo: ' + command)
+    try:
+        with open(GUARD_SOURCE, 'rb') as f:
+            current = f.read() == installed
+    except OSError:
+        current = True
+    if current:
+        return ('Guardián de seguridad: activo',
+                'Saca los plugins bloqueados antes de que Terminator los cargue.')
+    return ('Guardián de seguridad: desactualizado',
+            'Hay una versión nueva. Para actualizarlo: ' + command)
+
+
 def _notify(message):
     subprocess.Popen(['notify-send', 'Terminator', message])
 
@@ -179,6 +204,11 @@ class Marketplace(plugin.MenuItem):
             submenu.append(item)
 
         submenu.append(Gtk.SeparatorMenuItem())
+        label, tooltip = _guard_status()
+        guard = Gtk.MenuItem.new_with_label(label)
+        guard.set_tooltip_text(tooltip)
+        guard.set_sensitive(False)
+        submenu.append(guard)
         update = Gtk.MenuItem.new_with_label('Actualizar catálogo')
         update.connect('activate', self.on_update)
         submenu.append(update)

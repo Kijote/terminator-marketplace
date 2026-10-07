@@ -4,7 +4,21 @@
 #   curl -fsSL https://raw.githubusercontent.com/Kijote/terminator-marketplace/main/install.sh | bash
 # En ese caso clona el repo en $TERMINATOR_MARKETPLACE_DIR (por defecto
 # ~/.local/share/terminator-marketplace), o lo actualiza si ya esta.
+#
+# Opciones:
+#   --guard          instala o actualiza el guardian de seguridad (pide sudo)
+#   --remove-guard   lo desinstala (pide sudo)
+# Con el one-liner: curl ... | bash -s -- --guard
 set -euo pipefail
+
+GUARD=""
+for arg in "$@"; do
+    case "$arg" in
+        --guard) GUARD=install ;;
+        --remove-guard) GUARD=remove ;;
+        *) echo "Opción desconocida: $arg" >&2; exit 1 ;;
+    esac
+done
 
 REPO_URL="https://github.com/Kijote/terminator-marketplace.git"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || true)"
@@ -43,6 +57,19 @@ if 'Marketplace' not in enabled:
     section['enabled_plugins'] = enabled + ['Marketplace']
 config.write()
 EOF
+
+if [ -n "$GUARD" ]; then
+    SYSTEM_PLUGINS="$(python3 -c 'import os, terminatorlib; print(os.path.join(os.path.dirname(terminatorlib.__file__), "plugins"))')"
+    if [ "$GUARD" = install ]; then
+        echo "Instalando el guardián de seguridad en $SYSTEM_PLUGINS (pide sudo)..."
+        sudo install -m 644 "$REPO/guard/marketplace_guard.py" "$SYSTEM_PLUGINS/marketplace_guard.py"
+        echo "Guardián instalado: los plugins bloqueados se sacan antes de que Terminator los cargue."
+    else
+        echo "Desinstalando el guardián de seguridad (pide sudo)..."
+        sudo rm -f "$SYSTEM_PLUGINS/marketplace_guard.py"
+        echo "Guardián desinstalado."
+    fi
+fi
 
 echo "Marketplace instalado en $REPO."
 if pgrep -f /usr/bin/terminator >/dev/null; then
