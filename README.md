@@ -1,78 +1,85 @@
 # terminator-marketplace
 
-Marketplace de plugins para [Terminator](https://github.com/gnome-terminator/terminator).
-Agrega al menú del clic derecho un submenú **Plugins** para activar y desactivar
-en caliente los plugins del catálogo, y para actualizarlo con `git pull`. Cuando
-cambia el código de un plugin activo (al actualizar o al editarlo), se recarga
-solo, sin reiniciar Terminator.
+A plugin marketplace for [Terminator](https://github.com/gnome-terminator/terminator).
+It adds a **Plugins** submenu to the right-click menu where you can enable and
+disable the catalog's plugins on the fly, and update the catalog with
+`git pull`. When the code of an active plugin changes (after an update or
+because you edited it), it reloads automatically, without restarting Terminator.
 
-## Instalación
+> The plugins' menus and messages are currently in Spanish.
+
+## Installation
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Kijote/terminator-marketplace/main/install.sh | bash
 ```
 
-Clona el repo en `~/.local/share/terminator-marketplace` (o en
-`$TERMINATOR_MARKETPLACE_DIR`) y activa el marketplace. Si ya estaba instalado,
-lo actualiza. También se puede clonar a mano y correr `./install.sh` desde el clon.
+This clones the repo into `~/.local/share/terminator-marketplace` (or into
+`$TERMINATOR_MARKETPLACE_DIR`) and enables the marketplace. If it was already
+installed, it updates it. You can also clone the repo yourself and run
+`./install.sh` from your clone.
 
-Después cerrá Terminator del todo y abrilo de nuevo: clic derecho → **Plugins**.
+Then quit Terminator completely and open it again: right-click → **Plugins**.
 
 ## Plugins
 
-| Plugin | Qué hace |
+| Plugin | What it does |
 |---|---|
-| Autosave de sesión | Guarda ventanas, splits, directorios y comandos (`npm run dev:ws`, `claude --resume <sesión>`, monitores como `htop`/`watch` y `tail -f`) cada 15s y los restaura al abrir Terminator. Qué programas se relanzan se configura en `~/.config/terminator/autosave.conf` (una regla por línea, ej. `htop` o `tail -f`) o con clic derecho → **Autosave**. |
+| Session autosave (*Autosave de sesión*) | Saves windows, splits, working directories and running commands (`npm run dev:ws`, `claude --resume <session>`, monitors like `htop`/`watch`, and `tail -f`) every 15 seconds and restores them when Terminator opens. The programs to relaunch are configured in `~/.config/terminator/autosave.conf` (one rule per line, e.g. `htop` or `tail -f`) or from right-click → **Autosave**. |
 
-## Bloquear un plugin (parche de seguridad)
+## Blocking a plugin (security patch)
 
-Para desactivar un plugin en todas las instalaciones, agregale `"blocked"` con
-el motivo en `catalog.json` y subilo a `main`:
+To disable a plugin on every installation, add `"blocked"` with the reason to
+its entry in `catalog.json` and push it to `main`:
 
 ```json
 {
-  "id": "mi_plugin",
+  "id": "my_plugin",
   ...
-  "blocked": "Vulnerabilidad en la versión 1.2, se corrige en la próxima"
+  "blocked": "Vulnerability in version 1.2, fixed in the next release"
 }
 ```
 
-- El marketplace consulta el catálogo de GitHub al arrancar y cada 30 minutos,
-  **solo para leer los bloqueos**: no baja ni cambia código sin que lo pidas.
-- Un plugin bloqueado se desactiva al instante, se borra su symlink y sale de
-  la config, así que no vuelve a cargar. En el menú aparece como
-  **(bloqueado)**, con el motivo en el tooltip, y no se puede activar.
-- Para levantar el bloqueo, sacá el campo `"blocked"`. Los que lo tenían
-  activo lo vuelven a activar desde el menú.
-- Si el bloqueo se publica con Terminator cerrado, sin el guardián (ver abajo)
-  el plugin puede llegar a cargarse al arrancar, porque Terminator carga los
-  plugins sin un orden fijo, y se desactiva apenas el marketplace lee el
-  bloqueo, en los primeros segundos.
+- The marketplace checks the catalog on GitHub at startup and every 30
+  minutes, **only to read the blocks**: it never downloads or changes code
+  unless you ask it to.
+- A blocked plugin is disabled immediately, its symlink is deleted and it is
+  removed from the config, so it won't load again. In the menu it shows up as
+  **(bloqueado)** ("blocked"), with the reason in the tooltip, and it can't be
+  enabled.
+- To lift the block, remove the `"blocked"` field. Users who had it enabled can
+  enable it again from the menu.
+- If the block is published while Terminator is closed and the guard (see
+  below) isn't installed, the plugin may still load at startup, because
+  Terminator loads plugins in no fixed order. It is disabled as soon as the
+  marketplace reads the block, within the first few seconds.
 
-Sacar un plugin del catálogo también lo desactiva, pero solo cuando cada
-instalación actualiza el catálogo. Para un parche urgente usá `"blocked"`.
+Removing a plugin from the catalog also disables it, but only once each
+installation updates its catalog. For an urgent patch, use `"blocked"`.
 
-### Guardián de seguridad
+### Security guard
 
-Para que un plugin bloqueado no llegue a ejecutarse nunca, ni siquiera al
-arrancar, instalá el guardián:
+To make sure a blocked plugin never runs, not even at startup, install the
+guard:
 
 ```bash
-~/.local/share/terminator-marketplace/install.sh --guard   # o desde tu clon
-# con el one-liner:
+~/.local/share/terminator-marketplace/install.sh --guard   # or from your clone
+# with the one-liner:
 curl -fsSL https://raw.githubusercontent.com/Kijote/terminator-marketplace/main/install.sh | bash -s -- --guard
 ```
 
-Se instala con `sudo` en la carpeta de plugins del sistema de Terminator, que
-se carga antes que la tuya. Al arrancar Terminator consulta los bloqueos en
-GitHub (con un timeout de 2 segundos; sin red usa los últimos que conoce) y
-saca los plugins bloqueados antes de que se carguen.
+It is installed with `sudo` (or `pkexec` when there is no terminal) into
+Terminator's system plugin folder, which loads before yours. When Terminator
+starts, the guard checks GitHub for blocks (with a 2-second timeout; without
+network access it uses the last known blocks) and removes blocked plugins
+before they load.
 
-En el menú **Plugins** se ve si está activo o desactualizado. Cuando cambia,
-actualizalo con el mismo comando. Para sacarlo: `install.sh --remove-guard`.
+The **Plugins** menu shows whether the guard is active or outdated. When it
+changes, update it with the same command. To remove it:
+`install.sh --remove-guard`.
 
-## Contribuir
+## Contributing
 
-¿Querés sumar un plugin? Mirá [CONTRIBUTING.md](CONTRIBUTING.md): cómo
-escribirlo, agregarlo al catálogo, probarlo y abrir el pull request. Cada PR
-pasa por una validación automática (`scripts/validate_catalog.py`).
+Want to add a plugin? See [CONTRIBUTING.md](CONTRIBUTING.md) for how to write
+it, add it to the catalog, test it and open a pull request. Every PR goes
+through an automatic check (`scripts/validate_catalog.py`).
