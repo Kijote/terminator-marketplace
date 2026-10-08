@@ -1,9 +1,14 @@
 """Autosave de la sesion de Terminator (estilo tmux-continuum).
 
-Cada INTERVAL segundos guarda la disposicion actual (ventanas, splits,
-pestanas y directorio de cada terminal) como layout "default", que es el que
-Terminator abre al arrancar. Si en una terminal esta corriendo un comando
-permitido (ver _detect), tambien se guarda para relanzarlo al restaurar.
+Cada INTERVAL segundos guarda la disposicion de todas las ventanas abiertas
+(splits, pestanas y directorio de cada terminal) como layout "autosave". Si en
+una terminal esta corriendo un comando permitido (ver _detect), tambien se
+guarda para relanzarlo al restaurar.
+
+La sesion se restaura solo cuando Terminator arranca: la ventana inicial se
+reemplaza por las ventanas guardadas. El layout "default" queda como una sola
+terminal, asi las ventanas que se abren despues (que Terminator crea con ese
+layout) arrancan vacias.
 
 Los programas que se relanzan se configuran en ~/.config/terminator/autosave.conf
 (se crea con DEFAULT_RULES si no existe), o desde el menu del clic derecho
@@ -16,6 +21,7 @@ import json
 import os
 import re
 import shlex
+import time
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -29,7 +35,14 @@ from terminatorlib.util import dbg, err, get_config_dir
 AVAILABLE = ['AutosaveSession']
 
 INTERVAL = 15
-LAYOUT = 'default'
+LAYOUT = 'autosave'
+# Solo se restaura si el plugin carga en los primeros segundos del proceso:
+# activarlo despues desde el marketplace no tiene que abrir la sesion
+STARTUP_WINDOW = 30
+EMPTY_LAYOUT = {
+    'window0': {'type': 'Window', 'parent': ''},
+    'child1': {'type': 'Terminal', 'parent': 'window0'},
+}
 NVM_NODE = re.compile(r'/\.nvm/versions/node/(v[^/]+)/')
 
 RULES_FILE = os.path.join(get_config_dir(), 'autosave.conf')
@@ -88,6 +101,33 @@ def _write_rules(add=None, remove=None):
 def _match(rules, args):
     name = os.path.basename(args[0]) if args else ''
     return any(rule[0] == name and set(rule[1:]) <= set(args[1:]) for rule in rules)
+
+
+def _process_age():
+    """Segundos desde que arranco este proceso de Terminator."""
+    try:
+        with open('/proc/self/stat') as f:
+            # El campo 22 (starttime) va despues del nombre, que puede tener espacios
+            start = int(f.read().rsplit(')', 1)[1].split()[19])
+        with open('/proc/uptime') as f:
+            uptime = float(f.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return None
+    return uptime - start / os.sysconf('SC_CLK_TCK')
+
+
+def _migrate_layouts(config):
+    """Pasa una sesion guardada en "default" (versiones anteriores) a LAYOUT
+    y deja "default" como una sola terminal."""
+    layouts = config.list_layouts()
+    default = config.layout_get_config('default') if 'default' in layouts else {}
+    terminals = [e for e in default.values() if e.get('type') == 'Terminal']
+    if LAYOUT not in layouts and (len(terminals) > 1 or any(t.get('command') for t in terminals)):
+        config.add_layout(LAYOUT, default)
+    if len(terminals) != 1 or terminals[0].get('command') or terminals[0].get('directory'):
+        if not config.replace_layout('default', EMPTY_LAYOUT):
+            config.add_layout('default', EMPTY_LAYOUT)
+        config.save()
 
 
 def _children(pid):
@@ -169,9 +209,42 @@ class AutosaveSession(plugin.Plugin):
         # ese momento perderia el resume
         self.resumes = {}
         self.timer = GLib.timeout_add_seconds(INTERVAL, self.save)
+        try:
+            _migrate_layouts(Config())
+        except Exception as ex:
+            err('AutosaveSession: %s' % ex)
+        # La marca vive en Terminator (compartido por todo el proceso), asi un
+        # reload del plugin no vuelve a restaurar
+        terminator = Terminator()
+        if not getattr(terminator, 'autosave_started', False):
+            terminator.autosave_started = True
+            age = _process_age()
+            if age is not None and age < STARTUP_WINDOW:
+                GLib.idle_add(self.restore)
 
     def unload(self):
         GLib.source_remove(self.timer)
+
+    def restore(self):
+        """Reemplaza la ventana vacia del arranque por la sesion guardada."""
+        try:
+            terminator = Terminator()
+            options = terminator.config.options_get()
+            if options and options.layout not in (None, 'default'):
+                return False  # se pidio otro layout con -l
+            if len(terminator.windows) != 1 or len(terminator.terminals) != 1:
+                return False
+            if LAYOUT not in terminator.config.list_layouts():
+                return False
+            initial = terminator.windows[0]
+            terminator.create_layout(LAYOUT)
+            terminator.layout_done()
+            # Recien ahora se cierra la inicial: sin ventanas, Terminator se cerraria
+            if len(terminator.windows) > 1:
+                initial.on_destroy_event(initial)
+        except Exception as ex:
+            err('AutosaveSession: no se pudo restaurar la sesion: %s' % ex)
+        return False
 
     def callback(self, menuitems, menu, terminal):
         submenu = Gtk.Menu()
@@ -230,23 +303,29 @@ class AutosaveSession(plugin.Plugin):
                 return True
             rules = _read_rules()
             layout = terminator.describe_layout(save_cwd=True)
-            by_uuid = {str(t.uuid): t for t in terminator.terminals}
+            # describe_layout guarda el objeto uuid de cada terminal: se busca
+            # por identidad porque dos terminales pueden tener el mismo valor
+            # (ej. un layout restaurado dos veces)
+            by_uuid = {id(t.uuid): t for t in terminator.terminals}
+            alive = set()
             for entry in layout.values():
                 if entry.get('type') != 'Terminal':
                     continue
-                uuid = str(entry.get('uuid'))
-                term = by_uuid.get(uuid)
+                term = by_uuid.get(id(entry.get('uuid')))
                 command = term and _detect(term, rules)
-                if command == 'claude' and uuid in self.resumes:
-                    command = self.resumes[uuid]
+                key = id(term)
+                alive.add(key)
+                if command == 'claude' and key in self.resumes:
+                    command = self.resumes[key]
                 elif command and command.startswith('claude --resume '):
-                    self.resumes[uuid] = command
+                    self.resumes[key] = command
                 else:
-                    self.resumes.pop(uuid, None)
+                    self.resumes.pop(key, None)
                 if command:
                     # bash -i para que cargue nvm/PATH del .bashrc; al cortar
                     # el comando queda un shell abierto en la terminal
                     entry['command'] = 'bash -ic %s; exec bash' % shlex.quote(command)
+            self.resumes = {k: v for k, v in self.resumes.items() if k in alive}
             if repr(layout) == self.last:
                 return True
             config = Config()
